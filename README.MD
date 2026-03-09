@@ -93,39 +93,30 @@ sudo ./asn.sh remove
 
 ## Диагностика
 
-
 # Проверить, входит ли IP в allowlist
-```bash
 ipset test allowed_mobile_443 1.2.3.4
 
 # Количество подсетей в allowlist
-```bash
 ipset list allowed_mobile_443 | grep 'Number of entries'
 
 # Первые 50 подсетей
-```bash
 ipset list allowed_mobile_443 | sed -n '/^Members:/,$p' | tail -n +2 | head -50
 
 # Счётчики ACCEPT / DROP
-```bash
 iptables -L FILTER_MOBILE_443 -n -v --line-numbers
 
 # Смотреть счётчики в реальном времени
-```bash
 watch -n 1 'iptables -L FILTER_MOBILE_443 -n -v --line-numbers'
 
 # Посмотреть, через какую цепочку идёт трафик
-```bash
 iptables -L INPUT -n -v --line-numbers | head -30
 iptables -L FORWARD -n -v --line-numbers | head -30
 iptables -L DOCKER-USER -n -v --line-numbers
 
 # Посмотреть пакеты на 443
-```bash
 tcpdump -ni any port 443
 
 # Посмотреть пакеты от конкретного IP
-```bash
 tcpdump -ni any host 1.2.3.4 and port 443
 
 # Проверить обновление и таймер
