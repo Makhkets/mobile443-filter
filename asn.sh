@@ -73,6 +73,7 @@ install_all() {
 12389
 # T-mobile + Alfa-mobile
 205638
+202498
 214257
 EOF
 
