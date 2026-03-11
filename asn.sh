@@ -12,7 +12,7 @@ ASNS_FILE="${BASE_DIR}/asns.conf"
 
 DEFAULT_PORTS="443"
 
-TRAF_GUARD_BASE_URL_DEFAULT="https://raw.githubusercontent.com/wh3r3ar3you/traffic-guard-lists/refs/heads/main/public"
+TRAF_GUARD_BASE_URL_DEFAULT="https://raw.githubusercontent.com/shadow-netlab/traffic-guard-lists/refs/heads/main/public"
 GOV_LIST_URL_DEFAULT="${TRAF_GUARD_BASE_URL_DEFAULT}/government_networks.list"
 ANTISCANNER_LIST_URL_DEFAULT="${TRAF_GUARD_BASE_URL_DEFAULT}/antiscanner.list"
 

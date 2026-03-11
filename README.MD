@@ -67,7 +67,7 @@ FILTER_MOBILE_443: RETURN
 
 По умолчанию:
 
-- `TRAF_GUARD_BASE_URL="https://raw.githubusercontent.com/wh3r3ar3you/traffic-guard-lists/refs/heads/main/public"`
+- `TRAF_GUARD_BASE_URL="https://raw.githubusercontent.com/shadow-netlab/traffic-guard-lists/refs/heads/main/public"`
 - `GOV_LIST_URL="${TRAF_GUARD_BASE_URL}/government_networks.list"`
 - `ANTISCANNER_LIST_URL="${TRAF_GUARD_BASE_URL}/antiscanner.list"`
 
