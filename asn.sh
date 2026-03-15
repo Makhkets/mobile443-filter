@@ -480,6 +480,7 @@ IPSET_GOV_NAME="traf_guard_government"
 IPSET_GOV_TMP_NAME="${IPSET_GOV_NAME}_tmp"
 IPSET_ANTISCANNER_NAME="traf_guard_antiscanner"
 IPSET_ANTISCANNER_TMP_NAME="${IPSET_ANTISCANNER_NAME}_tmp"
+IPSET_DEFERRED_BLOCK_NAME="mobile443_deferred_block"
 
 PRECHECK_CHAIN="TRAF_GUARD_PRECHECK"
 CHAIN_NAME="FILTER_MOBILE_443"
@@ -549,6 +550,9 @@ ensure_ipsets() {
   fi
   if bool_is_true "$ENABLE_MOBILE_ALLOW"; then
     ensure_set_pair "$IPSET_ALLOW_NAME" "$IPSET_ALLOW_TMP_NAME"
+  fi
+  if bool_is_true "$ENABLE_TELEGRAM"; then
+    ipset create "$IPSET_DEFERRED_BLOCK_NAME" hash:ip family inet hashsize 4096 maxelem 65536 timeout 3600 -exist
   fi
 }
 
@@ -685,10 +689,22 @@ prepare_chains() {
   iptables -A "$CHAIN_NAME" -j "$PRECHECK_CHAIN"
 
   if bool_is_true "$ENABLE_MOBILE_ALLOW"; then
+    # 1) ACCEPT mobile ASN IPs immediately
     iptables -A "$CHAIN_NAME" -m set --match-set "$IPSET_ALLOW_NAME" src -j ACCEPT
-    iptables -A "$CHAIN_NAME" -m limit --limit 30/min --limit-burst 10 \
-      -j LOG --log-prefix "$LOG_PREFIX" --log-level 4
-    iptables -A "$CHAIN_NAME" -j DROP
+
+    if bool_is_true "$ENABLE_TELEGRAM"; then
+      # 2) DROP IPs that were already identified and deferred-blocked by the monitor
+      iptables -A "$CHAIN_NAME" -m set --match-set "$IPSET_DEFERRED_BLOCK_NAME" src -j DROP
+      # 3) LOG non-mobile IPs but let them through so xray can log the user email
+      iptables -A "$CHAIN_NAME" -m limit --limit 30/min --limit-burst 10 \
+        -j LOG --log-prefix "$LOG_PREFIX" --log-level 4
+      # No DROP here — connection passes to xray, monitor will add IP to deferred block
+    else
+      # Telegram disabled — immediate LOG + DROP as before
+      iptables -A "$CHAIN_NAME" -m limit --limit 30/min --limit-burst 10 \
+        -j LOG --log-prefix "$LOG_PREFIX" --log-level 4
+      iptables -A "$CHAIN_NAME" -j DROP
+    fi
   else
     iptables -A "$CHAIN_NAME" -j RETURN
   fi
@@ -968,6 +984,30 @@ extract_tg_id() {
   echo "$tg_id"
 }
 
+add_to_deferred_block() {
+  local ip="$1"
+  ipset add "$IPSET_DEFERRED_BLOCK_NAME" "$ip" timeout 3600 -exist 2>/dev/null || true
+  log "Added ${ip} to deferred block ipset for 1 hour"
+}
+
+find_user_by_ip_with_retry() {
+  local ip="$1"
+  local retries=5
+  local delay=1
+  local attempt email
+
+  for (( attempt=1; attempt<=retries; attempt++ )); do
+    email=$(find_user_by_ip "$ip")
+    if [[ -n "$email" ]]; then
+      echo "$email"
+      return
+    fi
+    if (( attempt < retries )); then
+      sleep "$delay"
+    fi
+  done
+}
+
 process_blocked() {
   local src_ip="$1"
   local dst_port="$2"
@@ -978,11 +1018,16 @@ process_blocked() {
 
   [[ "${ENABLE_TELEGRAM:-false}" == "true" ]] || return
 
-  email=$(find_user_by_ip "$src_ip")
+  # Wait for the IP to appear in xray access.log (connection is allowed through first)
+  email=$(find_user_by_ip_with_retry "$src_ip")
   if [[ -z "$email" ]]; then
-    log "Blocked ${src_ip}:${dst_port} - user not found in xray logs"
+    # Do not add to deferred block if NOT found. 
+    # This gives slow connections time to establish and appear in access.log on the next log trigger.
     return
   fi
+
+  # Add IP to deferred block immediately after identifying the user
+  add_to_deferred_block "$src_ip"
 
   api_response=$(get_remnawave_user "$email")
   if [[ -z "$api_response" ]]; then
@@ -1346,6 +1391,7 @@ remove_all() {
   ipset destroy traf_guard_government 2>/dev/null || true
   ipset destroy traf_guard_antiscanner_tmp 2>/dev/null || true
   ipset destroy traf_guard_antiscanner 2>/dev/null || true
+  ipset destroy mobile443_deferred_block 2>/dev/null || true
 
   echo "[*] Удаление systemd юнитов"
   rm -f /etc/systemd/system/mobile443-apply.service
