@@ -339,6 +339,9 @@ write_default_asns() {
 205638
 214257
 202498
+# Volna-Mobile
+203451
+203561
 EOF
 }
 
